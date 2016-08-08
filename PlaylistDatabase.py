@@ -82,19 +82,19 @@ class PlaylistDatabase():
         return stations
     
     def _get_station_id_from_name(self,name):
-        id = self._cur.execute('''
+        station_id = self._cur.execute('''
         SELECT Station.id from STATION where Station.name = ?''',(name,)).fetchone()[0]
-        return id
+        return station_id
         
-    def _get_playlist_id_from_station_id(self,id):
-        id = self._cur.execute('''
-        SELECT Station.playlist_id from STATION where Station.id = ?''',(id,)).fetchone()[0]
-        return id
+    def _get_playlist_id_from_station_id(self,station_id):
+        playlist_id = self._cur.execute('''
+        SELECT Station.playlist_id from STATION where Station.id = ?''',(station_id,)).fetchone()[0]
+        return playlist_id
     
     def _get_playlist_id_from_station_name(self,name):
-        id = self._cur.execute('''
+        playlist_id = self._cur.execute('''
         SELECT Station.playlist_id from STATION where Station.name = ?''',(name,)).fetchone()[0]
-        return id
+        return playlist_id
     
     def _make_playlist(self,name,commit=True):
         # TODO Sanitize the name more to disallow injection
@@ -137,9 +137,9 @@ class PlaylistDatabase():
         
         if get_id:        
             # The ID of the artist
-            id = self._cur.execute('SELECT id FROM ARTIST where name=?',(name,)).fetchone()[0]
-            #print(id)
-            return id
+            artist_id = self._cur.execute('SELECT id FROM ARTIST where name=?',(name,)).fetchone()[0]
+            #print(artist_id)
+            return artist_id
     
     def _make_track(self,name,album_id,artist_id,yt_link='',fs_link='',get_id=True,commit=True):
         '''
@@ -162,11 +162,11 @@ class PlaylistDatabase():
         
         if get_id:
             # And return the ID
-            id = self._cur.execute('''SELECT id FROM Track where 
+            track_id = self._cur.execute('''SELECT id FROM Track where 
             name=? and youtube_link=? and filesystem_link=? and album_id=? and artist_id=?'''
             ,(name,yt_link,fs_link,album_id,artist_id)
             ).fetchone()[0]
-            return id
+            return track_id
         
     def _add_playlist_entry(self,playlist_id,track_id,play_time,get_id=True,commit=True):
         '''
@@ -186,10 +186,10 @@ class PlaylistDatabase():
             self._conn.commit()
         
         if get_id:
-            id = self._cur.execute('SELECT id FROM ' + playlist_id + ''' where
+            playlist_id = self._cur.execute('SELECT id FROM ' + playlist_id + ''' where
             track_id = ? and play_time = ?''',(track_id,play_time)
             ).fetchone()[0]
-            return id
+            return playlist_id
     
     def _does_playlist_exist(self,playlist_common_name):
         '''
@@ -220,11 +220,11 @@ class PlaylistDatabase():
                 self._conn.commit()
             
             if get_id:
-                id = self._cur.execute('''
+                station_id = self._cur.execute('''
                 SELECT Station.id FROM Station WHERE
                 name = ? and web_address = ? and last_update = ? and ignore_artists = ? and ignore_titles = ? and playlist_id = ?'''
                 ,(station_name,web_address,last_update,ignore_artists,ignore_titles,playlist_name)).fetchone()[0]
-                return id
+                return station_id
         
     
        
@@ -279,9 +279,6 @@ class PlaylistDatabase():
             ORDER BY ''' + playlist +'.play_time DESC LIMIT ?',(num_tracks,))
             data = self._cur.fetchall()
             return data
-
-    def _get_tracks_socket(self):
-        raise NotImplementedError()
 
     def __init__(self,initialize=False):
         
