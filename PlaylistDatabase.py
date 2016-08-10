@@ -53,9 +53,9 @@ class PlaylistDatabase():
             id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
             name TEXT,
             web_address TEXT,
-            last_update INTEGER UNSIGNED,
             ignore_artists TEXT,
             ignore_titles TEXT,
+            youtube_playlist_id TEXT,
             playlist_id INTEGER
         );
             
@@ -76,6 +76,12 @@ class PlaylistDatabase():
         if commit:
             self._conn.commit()
     
+    def _generate_playlist_name_from_station_name(self,sname):
+        sname = sname.replace(' ','_')
+        sname = sname.replace('-','_')
+        return sname
+        
+        
     def _get_all_stations(self):
         
         stations = self._cur.execute('''SELECT * from Station''').fetchall()
@@ -98,8 +104,7 @@ class PlaylistDatabase():
     
     def _make_playlist(self,name,commit=True):
         # TODO Sanitize the name more to disallow injection
-        if ' ' in name:
-            raise ValueError('Spaces are not allowed in a playlist name')
+        name = self._generate_playlist_name_from_station_name(name)
     
         # Make the playlist. play_time is unique because this is a playlist for
         # a specific station
@@ -179,7 +184,7 @@ class PlaylistDatabase():
         VALUES (?, ?)
         ''', (track_id,play_time)
         )
-        
+                
         # If they're doing a bunch of makes they might not want
         # to commit after each one
         if commit:
@@ -202,7 +207,7 @@ class PlaylistDatabase():
     # BEGIN PUBLIC FUNCTIONS
     #
     
-    def create_station(self,station_name,web_address,ignore_artists='',ignore_titles='',last_update=0,get_id=True,commit=True):
+    def create_station(self,station_name,web_address,ignore_artists='[]',ignore_titles='[]',youtube_playlist_id='',get_id=True,commit=True):
         '''
         Create a station and associated playlist
         '''
@@ -212,8 +217,8 @@ class PlaylistDatabase():
             playlist_name = self._make_playlist(station_name)
             #print(playlist_name)
             self._cur.execute('''
-            INSERT INTO Station(name,web_address,last_update,ignore_artists,ignore_titles,playlist_id)
-            VALUES ( ?, ?, ?, ?, ?, ? )''', (station_name,web_address,last_update,ignore_artists,ignore_titles,playlist_name)
+            INSERT INTO Station(name,web_address,ignore_artists,ignore_titles,playlist_id,youtube_playlist_id)
+            VALUES ( ?, ?, ?, ?, ?, ? )''', (station_name,web_address,ignore_artists,ignore_titles,playlist_name,youtube_playlist_id)
             )
             
             if commit:
@@ -222,8 +227,8 @@ class PlaylistDatabase():
             if get_id:
                 station_id = self._cur.execute('''
                 SELECT Station.id FROM Station WHERE
-                name = ? and web_address = ? and last_update = ? and ignore_artists = ? and ignore_titles = ? and playlist_id = ?'''
-                ,(station_name,web_address,last_update,ignore_artists,ignore_titles,playlist_name)).fetchone()[0]
+                name = ? and web_address = ? and ignore_artists = ? and ignore_titles = ? and playlist_id = ? and youtube_playlist_id = ?'''
+                ,(station_name,web_address,ignore_artists,ignore_titles,playlist_name,youtube_playlist_id)).fetchone()[0]
                 return station_id
         
     
@@ -278,7 +283,37 @@ class PlaylistDatabase():
             ON ''' + playlist + '''.track_id = Track.id and Track.artist_id = Artist.id
             ORDER BY ''' + playlist +'.play_time DESC LIMIT ?',(num_tracks,))
             data = self._cur.fetchall()
-            return data
+            if num_tracks == 1:
+                return data[0]
+            else:
+                return data
+            
+    def get_station_data(self,station=''):
+        '''
+        Return a list of dictionaries of the station data
+        '''
+        
+        with self._lock:
+            out_list = []
+            for s in self._get_all_stations():
+                id,name,web_address,ignore_artists,ignore_titles,youtube_playlist_id,playlist_id = s
+                
+                channel_dict = {}
+    
+                channel_dict['site'] = web_address
+                exec("channel_dict['ignoreartists'] = "+ ignore_artists)
+                channel_dict['name'] = name
+                channel_dict['playlist'] = youtube_playlist_id
+                try:
+                    name,artist,time,link = self.get_latest_station_tracks(name)
+                    channel_dict['lastartist'] = artist
+                    channel_dict['lastsong'] = name
+                except IndexError:
+                    channel_dict['lastartist'] = ''
+                    channel_dict['lastsong'] = ''
+                out_list.append(channel_dict)
+
+        return out_list
 
     def __init__(self,initialize=False):
         
