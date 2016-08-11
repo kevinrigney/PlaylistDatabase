@@ -36,7 +36,8 @@ class PlaylistDatabase():
         CREATE TABLE Album (
             id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
             name   TEXT,
-            artist_id  INTEGER
+            artist_id  INTEGER,
+            unique(name,artist_id)
         );
         
         CREATE TABLE Track (
@@ -45,8 +46,8 @@ class PlaylistDatabase():
             youtube_link TEXT,
             filesystem_link TEXT, 
             album_id  INTEGER,
-            artist_id  INTEGER        
-            
+            artist_id  INTEGER,
+            unique(name,album_id,artist_id)            
         );
             
         CREATE TABLE Station (
@@ -142,10 +143,34 @@ class PlaylistDatabase():
         
         if get_id:        
             # The ID of the artist
-            artist_id = self._cur.execute('SELECT id FROM ARTIST where name=?',(name,)).fetchone()[0]
+            artist_id = self._cur.execute('SELECT id FROM Artist where name=?',(name,)).fetchone()[0]
             #print(artist_id)
             return artist_id
+        
     
+    def _make_album(self,artist_id,album,get_id=True,commit=True):
+        '''
+        Create an album in the table.
+        '''
+        
+        # Get the artist id
+        
+        self._cur.execute('''
+        INSERT OR IGNORE INTO Album(name,artist_id)
+        VALUES ( ?, ? )''', (album,artist_id)
+        )
+        
+        # If they're doing a bunch of makes they might not want
+        # to commit after each one
+        if commit:
+            self._conn.commit()
+        
+        if get_id:        
+            # The ID of the album
+            album_id = self._cur.execute('SELECT id FROM Album where name=? and artist_id = ?',(album,artist_id)).fetchone()[0]
+            #print(artist_id)
+            return album_id
+        
     def _make_track(self,name,album_id,artist_id,yt_link='',fs_link='',get_id=True,commit=True):
         '''
         Given a track name, ablum ID,and an artist ID, make a track in the
@@ -207,7 +232,7 @@ class PlaylistDatabase():
     # BEGIN PUBLIC FUNCTIONS
     #
     
-    def create_station(self,station_name,web_address,ignore_artists='[]',ignore_titles='[]',youtube_playlist_id='',get_id=True,commit=True):
+    def create_station(self,station_name,web_address,ignore_artists=[],ignore_titles=[],youtube_playlist_id='',get_id=True,commit=True):
         '''
         Create a station and associated playlist
         '''
@@ -215,6 +240,11 @@ class PlaylistDatabase():
         with self._lock:
             # Create a new playlist to use for this station
             playlist_name = self._make_playlist(station_name)
+            
+            # v2 will use a different format for this... Probably another table?
+            ignore_artists = str(ignore_artists)
+            ignore_titles = str(ignore_titles)
+            
             #print(playlist_name)
             self._cur.execute('''
             INSERT INTO Station(name,web_address,ignore_artists,ignore_titles,playlist_id,youtube_playlist_id)
@@ -233,7 +263,7 @@ class PlaylistDatabase():
         
     
        
-    def add_track_to_station_playlist(self,station_name,artist,track,date,youtube_link='',commit = True):
+    def add_track_to_station_playlist(self,station_name,artist,album,track,date,youtube_link='',commit = True):
         '''
         This public function takes a station common name
         and a tuple representing the tracks data. It looks up the
@@ -259,8 +289,12 @@ class PlaylistDatabase():
             
             # Make (or don't) the artist
             artist_id = self._make_artist(artist,commit=commit)
-            # Make a track
-            track_id = self._make_track(track,0,artist_id,youtube_link,commit=commit)
+            
+            # Make (or don't) the album
+            album_id = self._make_album(artist_id,album,commit=commit)
+            
+            # Make (or don't) a track
+            track_id = self._make_track(track,album_id,artist_id,youtube_link,commit=commit)
             
             # Make a date. It's stored as a string because 
             # sqlite doesn't have a date data type. That's OK though
@@ -279,16 +313,30 @@ class PlaylistDatabase():
         with self._lock:
             playlist = self._get_playlist_id_from_station_name(station_name)
             
-            self._cur.execute('SELECT Track.name, Artist.name, '+playlist+'.play_time, Track.youtube_link FROM ' +playlist + ''' JOIN Artist JOIN Track
-            ON ''' + playlist + '''.track_id = Track.id and Track.artist_id = Artist.id
+            self._cur.execute('SELECT Track.name, Artist.name, '+playlist+'.play_time, Track.youtube_link, Album.name, Track.filesystem_link FROM ' +playlist + ''' 
+            JOIN Artist JOIN Track JOIN Album ON 
+            ''' + playlist + '''.track_id = Track.id and Track.artist_id = Artist.id and Track.album_id = Album.id
             ORDER BY ''' + playlist +'.play_time DESC LIMIT ?',(num_tracks,))
             data = self._cur.fetchall()
-            if num_tracks == 1:
-                return data[0]
-            else:
-                return data
             
-    def get_station_data(self,station=''):
+            # The data we will send back
+            tracks = []
+            for t in data:
+                temp = {}
+                temp['name'] = t[0]
+                temp['artist'] = t[1]
+                temp['time'] = t[2]               
+                temp['youtube'] = t[3]
+                temp['album'] = t[4]
+                temp['filesystem'] = t[5]
+                tracks.append(temp)
+                
+            if num_tracks == 1:
+                return tracks[0]
+            else:
+                return tracks
+            
+    def get_station_data(self,station=None):
         '''
         Return a list of dictionaries of the station data
         '''
@@ -298,26 +346,53 @@ class PlaylistDatabase():
             for s in self._get_all_stations():
                 id,name,web_address,ignore_artists,ignore_titles,youtube_playlist_id,playlist_id = s
                 
+                if station is not None:
+                    if name != station:
+                        continue
+                
                 channel_dict = {}
     
                 channel_dict['site'] = web_address
                 exec("channel_dict['ignoreartists'] = "+ ignore_artists)
+                exec("channel_dict['ignoretitles'] = "+ ignore_titles)
                 channel_dict['name'] = name
                 channel_dict['playlist'] = youtube_playlist_id
                 try:
-                    name,artist,time,link = self.get_latest_station_tracks(name)
-                    channel_dict['lastartist'] = artist
-                    channel_dict['lastsong'] = name
+                    track_data = self.get_latest_station_tracks(name)
+                    channel_dict['lastartist'] = track_data['artist']
+                    channel_dict['lastsong'] = track_data['name']
                 except IndexError:
                     channel_dict['lastartist'] = ''
                     channel_dict['lastsong'] = ''
+                    
+                
                 out_list.append(channel_dict)
 
-        return out_list
+        if station is not None:
+            return out_list[0]
+        else:
+            return out_list
 
-    def __init__(self,initialize=False):
+    def look_up_song_youtube(self,artist,album,title):
+        '''
+        Given the artist, album, and title,
+        Look up the song's youtube URL
+        '''
         
-        self._conn = sqlite3.connect('playlist_store.db')
+        with self._lock:
+            url = self._cur.execute('''SELECT Track.youtube_link from Track JOIN Artist JOIN Album ON
+            Track.artist_id = Artist.id and Track.album_id = Album.id WHERE Track.name = ? and Album.name = ? and Artist.name = ? LIMIT 1''',
+            (title,album,artist)).fetchone()
+            
+            # LookupError seems better
+            if url == None:
+                raise LookupError
+            else:
+                return url[0]
+
+    def __init__(self,db_name='playlist_store.db',initialize=False):
+        
+        self._conn = sqlite3.connect(db_name)
         self._cur = self._conn.cursor()
         
         # Lock on our public-facing functions
@@ -327,3 +402,83 @@ class PlaylistDatabase():
             self._init_database_schema()
 
         #main()
+if __name__ == '__main__':
+
+    print('Unit Testing...')
+    db = PlaylistDatabase('/tmp/dbtest.db',True)
+    
+    stations = []
+    for ii in range(100):
+        stations.append({
+                 'name':'Station'+str(ii),
+                 'site':'Station'+str(ii)+'.Site',
+                 'ignoreartists':['Station'+str(ii)+'.ignoreartist1','Station'+str(ii)+'.ignoreartist2'],
+                 'ignoretitles':['Station'+str(ii)+'.ignoretitle1','Station'+str(ii)+'.ignoretitle2'],
+                 'playlist':'Station'+str(ii)+'.PlaylistURL'
+                })
+    local_station_count = len(stations)
+    
+    for s in stations:
+        db.create_station(s['name'],s['site'],s['ignoreartists'],s['ignoretitles'],s['playlist'])
+    
+    # Do it again (to make sure we aren't duplicating stations
+    #for s in stations:
+    #    db.create_station(s['name'],s['site'],s['ignoreartists'],s['ignoretitles'],s['playlist'])
+    # TODO Make a test for this
+    
+    
+    # Make sure our data matches the DB
+    db_station_count = 0
+    for s in stations:
+        ret_station = db.get_station_data(s['name'])
+        for key in s:
+            assert s[key] == ret_station[key]
+        db_station_count+=1
+            
+    # And make sure we got every station
+    assert db_station_count == local_station_count
+    
+    # And make sure there aren't duplicates in the DB
+    assert local_station_count == len(db.get_station_data())
+    
+    # TODO Test insertion of songs into playlists
+    
+    track_id = []
+    for s in stations:
+        sname = s['name']
+        
+        # Make some tracks for this station
+        tracks = []
+        for ii in range(100):
+            tracks.append({
+                       'album':'Album'+sname+str(ii),
+                       'artist':'Artist'+sname+str(ii),
+                       'name':'Name'+sname+str(ii),
+                       'date':datetime.datetime.fromtimestamp(ii*1000),
+                       'youtube':'Youtube'+sname+str(ii),
+                       })
+        for t in tracks:          
+            track_id.append(db.add_track_to_station_playlist(sname,t['album'],t['artist'],t['name'],t['date'],t['youtube'],commit=False))
+    
+    # And make sure that all of the id's line up
+    '''
+    for s in stations:
+        sname = s['name']
+        
+        # Make some tracks for this station - JUST LIKE ABOVE
+        tracks = []
+        for ii in range(100):
+            tracks.append({
+                       'album':'Album'+sname+str(ii),
+                       'artist':'Artist'+sname+str(ii),
+                       'name':'Name'+sname+str(ii),
+                       'date':datetime.datetime.fromtimestamp(ii*1000),
+                       'youtube':'Youtube'+sname+str(ii),
+                       })
+    '''
+    
+    db._conn.commit()
+    print('All tests passed')
+            
+            
+        
