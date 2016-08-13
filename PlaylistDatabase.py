@@ -57,7 +57,7 @@ class PlaylistDatabase():
             ignore_artists TEXT,
             ignore_titles TEXT,
             youtube_playlist_id TEXT,
-            playlist_id INTEGER
+            playlist_id TEXT
         );
             
         ''')
