@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import sqlite3
+import mysql.connector as mysql
 import datetime
 
 from math import floor
@@ -22,108 +22,146 @@ class PlaylistDatabase():
         * Dropping all relevant tables.
         * Creating new empty tables.
         '''
-        self._cur.executescript('''
-        DROP TABLE IF EXISTS Artist;
-        DROP TABLE IF EXISTS Album;
-        DROP TABLE IF EXISTS Track;
-        DROP TABLE IF EXISTS Station;
         
-        CREATE TABLE Artist (
-            id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-            name    TEXT UNIQUE
-        );
+        """
+        self._cur.execute('''
+        IF EXISTS(
+            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Album'
+        )
+        THEN
+            ALTER TABLE Album DROP FOREIGN KEY artist_id
+        END IF;''')
         
-        CREATE TABLE Album (
-            id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-            name   TEXT,
-            artist_id  INTEGER,
-            unique(name,artist_id)
-        );
+        self._cur.execute('''
+        IF EXISTS(
+            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Track'
+        )
+        THEN
+            ALTER TABLE Track DROP FOREIGN KEY album_id
+        END IF;''')
         
-        CREATE TABLE Track (
-            id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-            name TEXT,
+        self._cur.execute('''
+        IF EXISTS(
+            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Track'
+        )
+        THEN
+            ALTER TABLE Track DROP FOREIGN KEY artist_id
+        END IF;''')
+        
+        self._cur.execute('''
+        IF EXISTS(
+            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Playlist'
+        )
+        THEN
+               ALTER TABLE Playlist DROP FOREIGN KEY track_id
+        END IF;''')
+        
+        self._cur.execute('''
+        IF EXISTS(
+            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Playlist'
+        )
+        THEN
+               ALTER TABLE Playlist DROP FOREIGN KEY station_id
+        END IF;''')
+        
+        self._cur.execute('DROP TABLE IF EXISTS Artist')
+        self._cur.execute('DROP TABLE IF EXISTS Album')
+        self._cur.execute('DROP TABLE IF EXISTS Track')
+        self._cur.execute('DROP TABLE IF EXISTS Station')
+        """
+        print('Dropping...')
+        try:
+            self._cur.execute('drop database PlaylistDB')
+        except mysql.errors.DatabaseError:
+            #print('No database exists.')
+            pass
+            
+        self._cur.execute('create database PlaylistDB')
+        self._cur.execute('use PlaylistDB')
+
+        
+        self._cur.execute('''CREATE TABLE IF NOT EXISTS Artist (
+            id  INTEGER NOT NULL AUTO_INCREMENT UNIQUE,
+            artist_name VARCHAR(256) UNIQUE NOT NULL,
+        
+            PRIMARY KEY (id),
+            KEY (artist_name)
+        )''')
+        
+        self._cur.execute('''CREATE TABLE IF NOT EXISTS Album (
+            id  INTEGER NOT NULL AUTO_INCREMENT UNIQUE,
+            album_name VARCHAR(256) NOT NULL,
+            artist_id  INTEGER NOT NULL,
+        
+            PRIMARY KEY (id),
+            FOREIGN KEY (artist_id) REFERENCES Artist(id) ON UPDATE CASCADE,
+            UNIQUE(album_name,artist_id)
+        )''')
+        
+        self._cur.execute('''CREATE TABLE IF NOT EXISTS Track (
+            id  INTEGER NOT NULL AUTO_INCREMENT UNIQUE,
+            track_name VARCHAR(256) NOT NULL,
             youtube_link TEXT,
             filesystem_link TEXT, 
-            album_id  INTEGER,
-            artist_id  INTEGER,
-            unique(name,album_id,artist_id)            
-        );
-            
-        CREATE TABLE Station (
-            id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-            name TEXT,
+            album_id  INTEGER NOT NULL,
+            artist_id  INTEGER NOT NULL,
+        
+            PRIMARY KEY (id),
+            FOREIGN KEY (album_id) REFERENCES Album(id)  ON UPDATE CASCADE,
+            FOREIGN KEY (artist_id) REFERENCES Artist(id) ON UPDATE CASCADE ,
+            KEY (track_name),
+            UNIQUE(track_name,album_id,artist_id)            
+        )''')
+        
+        self._cur.execute('''CREATE TABLE IF NOT EXISTS Station (
+            id  INTEGER NOT NULL AUTO_INCREMENT UNIQUE,
+            station_name VARCHAR(256) NOT NULL UNIQUE,
             web_address TEXT,
             ignore_artists TEXT,
             ignore_titles TEXT,
             youtube_playlist_id TEXT,
-            playlist_id TEXT
-        );
-            
-        ''')
         
-        # Get all tables beginning with playlist_
-        playlist_tables = self._cur.execute('''
-        SELECT name
-        FROM sqlite_master
-        WHERE name LIKE 'playlist_%'
-        '''
-        ).fetchall()
+            PRIMARY KEY (id),
+            KEY (station_name)
+        )''')
         
-        # And drop them
-        for t in playlist_tables:
-            self._cur.execute('DROP TABLE ' +t[0])
+        self._cur.execute('''CREATE TABLE IF NOT EXISTS Playlist (
+            id INTEGER NOT NULL AUTO_INCREMENT UNIQUE,
+            track_id INTEGER NOT NULL,
+            station_id INTEGER NOT NULL,
+            play_time DATETIME NOT NULL,
+        
+            PRIMARY KEY (id),
+            KEY (station_id),
+            FOREIGN KEY (track_id) REFERENCES Track(id) ON UPDATE CASCADE,
+            FOREIGN KEY (station_id) REFERENCES Station(id) ON UPDATE CASCADE,
+            UNIQUE(track_id,station_id,play_time)
+        )''')           
+        
         
         if commit:
             self._conn.commit()
-    
-    def _generate_playlist_name_from_station_name(self,sname):
-        sname = sname.replace(' ','_')
-        sname = sname.replace('-','_')
-        return sname
         
         
     def _get_all_stations(self):
         
-        stations = self._cur.execute('''SELECT * from Station''').fetchall()
+        self._cur.execute('''SELECT * from Station''')
+        stations = self._cur.fetchall()
+        
         return stations
     
     def _get_station_id_from_name(self,name):
-        station_id = self._cur.execute('''
-        SELECT Station.id from STATION where Station.name = ?''',(name,)).fetchone()[0]
+               
+        self._cur.execute('''SELECT Station.id from Station where Station.station_name = %s''',(name,))
+        
+        try:
+            station_id = self._cur.fetchone()[0]
+        except TypeError:
+            # LookupError seems better here
+            raise LookupError('Station: ' + str(name) + ' could not be found.')
+                
+        #print('station_id: ' + str(station_id))
         return station_id
-        
-    def _get_playlist_id_from_station_id(self,station_id):
-        playlist_id = self._cur.execute('''
-        SELECT Station.playlist_id from STATION where Station.id = ?''',(station_id,)).fetchone()[0]
-        return playlist_id
-    
-    def _get_playlist_id_from_station_name(self,name):
-        playlist_id = self._cur.execute('''
-        SELECT Station.playlist_id from STATION where Station.name = ?''',(name,)).fetchone()[0]
-        return playlist_id
-    
-    def _make_playlist(self,name,commit=True):
-        # TODO Sanitize the name more to disallow injection
-        name = self._generate_playlist_name_from_station_name(name)
-    
-        # Make the playlist. play_time is unique because this is a playlist for
-        # a specific station
-        self._cur.execute('''
-        CREATE TABLE playlist_''' + name + '''(
-            id  INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-            track_id INTEGER,
-            play_time VARCHAR(24) UNIQUE
-        )
-        ''')
-        
-        # If they're doing a bunch of makes they might not want
-        # to commit after each one
-        if commit:
-            self._conn.commit()
-        
-        # Return the playlist name
-        return 'playlist_'+name
     
     def _make_artist(self,name,get_id=True,commit=True):
         '''
@@ -132,20 +170,19 @@ class PlaylistDatabase():
         '''
         
         self._cur.execute('''
-        INSERT OR IGNORE INTO Artist(name)
-        VALUES ( ? )''', (name,)
+        INSERT IGNORE INTO Artist(artist_name)
+        VALUES ( %s )''', (name,)
         )
         
         # If they're doing a bunch of makes they might not want
         # to commit after each one
         if commit:
             self._conn.commit()
-        
-        if get_id:        
-            # The ID of the artist
-            artist_id = self._cur.execute('SELECT id FROM Artist where name=?',(name,)).fetchone()[0]
-            #print(artist_id)
-            return artist_id
+        if get_id:
+            self._cur.execute('''
+            SELECT Artist.id FROM Artist WHERE
+            Artist.artist_name=%s''',(name,))
+            return self._cur.fetchone()[0]        
         
     
     def _make_album(self,artist_id,album,get_id=True,commit=True):
@@ -156,8 +193,8 @@ class PlaylistDatabase():
         # Get the artist id
         
         self._cur.execute('''
-        INSERT OR IGNORE INTO Album(name,artist_id)
-        VALUES ( ?, ? )''', (album,artist_id)
+        INSERT IGNORE INTO Album(album_name,artist_id)
+        VALUES ( %s, %s )''', (album,artist_id)
         )
         
         # If they're doing a bunch of makes they might not want
@@ -165,11 +202,13 @@ class PlaylistDatabase():
         if commit:
             self._conn.commit()
         
-        if get_id:        
-            # The ID of the album
-            album_id = self._cur.execute('SELECT id FROM Album where name=? and artist_id = ?',(album,artist_id)).fetchone()[0]
-            #print(artist_id)
-            return album_id
+        if get_id:
+            self._cur.execute('''
+            SELECT Album.id FROM Album WHERE
+            Album.album_name=%s AND Album.artist_id=%s
+            ''',(album,artist_id))
+            return self._cur.fetchone()[0]        
+        
         
     def _make_track(self,name,album_id,artist_id,yt_link='',fs_link='',get_id=True,commit=True):
         '''
@@ -180,8 +219,9 @@ class PlaylistDatabase():
         # We're doing a 'OR REPLACE' because maybe we're updating a track with a 
         # new youtube or filesystem link.
         self._cur.execute('''
-        INSERT OR REPLACE INTO Track (name,youtube_link,filesystem_link,album_id,artist_id)
-        VALUES( ?, ?, ?, ?, ? ) ''',
+        INSERT INTO Track (track_name,youtube_link,filesystem_link,album_id,artist_id)
+        VALUES( %s, %s, %s, %s, %s ) ON DUPLICATE KEY UPDATE
+        youtube_link=VALUES(youtube_link),filesystem_link=VALUES(filesystem_link)''',
         (name,yt_link,fs_link,album_id,artist_id)
         )
         
@@ -191,23 +231,25 @@ class PlaylistDatabase():
             self._conn.commit()
         
         if get_id:
-            # And return the ID
-            track_id = self._cur.execute('''SELECT id FROM Track where 
-            name=? and youtube_link=? and filesystem_link=? and album_id=? and artist_id=?'''
-            ,(name,yt_link,fs_link,album_id,artist_id)
-            ).fetchone()[0]
-            return track_id
-        
-    def _add_playlist_entry(self,playlist_id,track_id,play_time,get_id=True,commit=True):
+            self._cur.execute('''
+            SELECT Track.id FROM Track WHERE
+            Track.track_name=%s AND 
+            Track.youtube_link=%s AND 
+            Track.filesystem_link=%s AND
+            Track.album_id=%s AND
+            Track.artist_id=%s''',(name,yt_link,fs_link,album_id,artist_id))
+            return self._cur.fetchone()[0]        
+
+    def _add_playlist_entry(self,station_id,track_id,play_time,commit=True):
         '''
-        Given a playlist ID, track ID, and a play time (a string date)
+        Given a station ID, track ID, and a play time (a string date)
         create a new row in the corresponding playlist table
         '''
         # No 'INSERT OR REPLACE INTO' because this should be unique based on the play times
         self._cur.execute('''
-        INSERT INTO ''' + playlist_id + ''' (track_id,play_time)
-        VALUES (?, ?)
-        ''', (track_id,play_time)
+        INSERT INTO Playlist (track_id,station_id,play_time)
+        VALUES (%s, %s, %s)
+        ''', (track_id,station_id,play_time)
         )
                 
         # If they're doing a bunch of makes they might not want
@@ -215,18 +257,7 @@ class PlaylistDatabase():
         if commit:
             self._conn.commit()
         
-        if get_id:
-            playlist_id = self._cur.execute('SELECT id FROM ' + playlist_id + ''' where
-            track_id = ? and play_time = ?''',(track_id,play_time)
-            ).fetchone()[0]
-            return playlist_id
-    
-    def _does_playlist_exist(self,playlist_common_name):
-        '''
-        Given a "common name" of a playlist, check if we have one
-        already in the database
-        '''
-        raise NotImplementedError()   
+        return self._cur.lastrowid
     
     #
     # BEGIN PUBLIC FUNCTIONS
@@ -239,29 +270,27 @@ class PlaylistDatabase():
         
         with self._lock:
             # Create a new playlist to use for this station
-            playlist_name = self._make_playlist(station_name)
+            #playlist_name = self._make_playlist(station_name)
             
             # v2 will use a different format for this... Probably another table?
             ignore_artists = str(ignore_artists)
             ignore_titles = str(ignore_titles)
-            
             #print(playlist_name)
             self._cur.execute('''
-            INSERT INTO Station(name,web_address,ignore_artists,ignore_titles,playlist_id,youtube_playlist_id)
-            VALUES ( ?, ?, ?, ?, ?, ? )''', (station_name,web_address,ignore_artists,ignore_titles,playlist_name,youtube_playlist_id)
+            INSERT IGNORE INTO Station(station_name,web_address,ignore_artists,ignore_titles,youtube_playlist_id)
+            VALUES ( %s, %s, %s, %s, %s )''', (station_name,web_address,ignore_artists,ignore_titles,youtube_playlist_id)
             )
             
             if commit:
                 self._conn.commit()
             
             if get_id:
-                station_id = self._cur.execute('''
+                self._cur.execute('''
                 SELECT Station.id FROM Station WHERE
-                name = ? and web_address = ? and ignore_artists = ? and ignore_titles = ? and playlist_id = ? and youtube_playlist_id = ?'''
-                ,(station_name,web_address,ignore_artists,ignore_titles,playlist_name,youtube_playlist_id)).fetchone()[0]
-                return station_id
-        
-    
+                station_name=%s''',(station_name,))              
+            
+                return self._cur.fetchone()[0]        
+
        
     def add_track_to_station_playlist(self,station_name,artist,album,track,date,youtube_link='',commit = True):
         '''
@@ -283,8 +312,8 @@ class PlaylistDatabase():
                         
             # Now that we have the data...
             
-            # Loop up the station's playlist
-            playlist_id = self._get_playlist_id_from_station_name(station_name)
+            # Loop up the station's ID
+            station_id = self._get_station_id_from_name(station_name)
             #print('playlist_id is :'+ playlist_id)
             
             # Make (or don't) the artist
@@ -299,24 +328,25 @@ class PlaylistDatabase():
             # Make a date. It's stored as a string because 
             # sqlite doesn't have a date data type. That's OK though
             # because sqlite can search based on this string's structure.    
-            date_ms = int(floor(date.microsecond/1000))
-            date = date.strftime('%Y-%m-%d %H:%M:%S.')+str(date_ms)
+            #date_ms = int(floor(date.microsecond/1000))
+            date = date.strftime('%Y-%m-%d %H:%M:%S.%f')
             
             # Now that we have the data we can make an entry
-            return self._add_playlist_entry(playlist_id,track_id,date,commit=commit)
+            return self._add_playlist_entry(station_id,track_id,date,commit=commit)
 
+    
     def get_latest_station_tracks(self,station_name,num_tracks=1):
         '''
         Get a number of tracks from a station. Order from newest
         to oldest.
         '''
         with self._lock:
-            playlist = self._get_playlist_id_from_station_name(station_name)
+            station_id = self._get_station_id_from_name(station_name)
             
-            self._cur.execute('SELECT Track.name, Artist.name, '+playlist+'.play_time, Track.youtube_link, Album.name, Track.filesystem_link FROM ' +playlist + ''' 
+            self._cur.execute('''SELECT Track.track_name, Artist.artist_name, Playlist.play_time, Track.youtube_link, Album.album_name, Track.filesystem_link FROM Playlist
             JOIN Artist JOIN Track JOIN Album ON 
-            ''' + playlist + '''.track_id = Track.id and Track.artist_id = Artist.id and Track.album_id = Album.id
-            ORDER BY ''' + playlist +'.play_time DESC LIMIT ?',(num_tracks,))
+            Playlist.track_id = Track.id and Track.artist_id = Artist.id and Track.album_id = Album.id WHERE Playlist.station_id = %s
+            ORDER BY Playlist.play_time DESC LIMIT %s''',(station_id,num_tracks))
             data = self._cur.fetchall()
             
             # The data we will send back
@@ -335,6 +365,8 @@ class PlaylistDatabase():
                 return tracks[0]
             else:
                 return tracks
+    
+    
             
     def get_station_data(self,station=None):
         '''
@@ -344,7 +376,7 @@ class PlaylistDatabase():
         with self._lock:
             out_list = []
             for s in self._get_all_stations():
-                id,name,web_address,ignore_artists,ignore_titles,youtube_playlist_id,playlist_id = s
+                id,name,web_address,ignore_artists,ignore_titles,youtube_playlist_id = s
                 
                 if station is not None:
                     if name != station:
@@ -372,7 +404,7 @@ class PlaylistDatabase():
             return out_list[0]
         else:
             return out_list
-
+    
     def look_up_song_youtube(self,artist,album,title):
         '''
         Given the artist, album, and title,
@@ -381,7 +413,7 @@ class PlaylistDatabase():
         
         with self._lock:
             url = self._cur.execute('''SELECT Track.youtube_link from Track JOIN Artist JOIN Album ON
-            Track.artist_id = Artist.id and Track.album_id = Album.id WHERE Track.name = ? and Album.name = ? and Artist.name = ? LIMIT 1''',
+            Track.artist_id = Artist.id and Track.album_id = Album.id WHERE Track.track_name = %s and Album.name = %s and Artist.name = %s LIMIT 1''',
             (title,album,artist)).fetchone()
             
             # LookupError seems better
@@ -390,10 +422,18 @@ class PlaylistDatabase():
             else:
                 return url[0]
 
-    def __init__(self,db_name='playlist_store.db',initialize=False):
+    def __init__(self,user='root',password='',host='127.0.0.1',initialize=False):
         
-        self._conn = sqlite3.connect(db_name)
+        self._conn = mysql.connect(user=user,password=password,host=host)
+        
         self._cur = self._conn.cursor()
+        
+        # Check if the DB exists
+        try:
+            self._cur.execute('USE PlaylistDB;')
+        except mysql.errors.ProgrammingError:
+            print('The database does not exist. Initializing')
+            initialize = True
         
         # Lock on our public-facing functions
         self._lock = RLock()
@@ -405,10 +445,10 @@ class PlaylistDatabase():
 if __name__ == '__main__':
 
     print('Unit Testing...')
-    db = PlaylistDatabase('/tmp/dbtest.db',True)
+    db = PlaylistDatabase(initialize=True)
     
     stations = []
-    for ii in range(100):
+    for ii in range(10):
         stations.append({
                  'name':'Station'+str(ii),
                  'site':'Station'+str(ii)+'.Site',
@@ -419,14 +459,20 @@ if __name__ == '__main__':
     local_station_count = len(stations)
     
     for s in stations:
-        db.create_station(s['name'],s['site'],s['ignoreartists'],s['ignoretitles'],s['playlist'])
+        print('Inserting... ',end='')
+        id = db.create_station(s['name'],s['site'],s['ignoreartists'],s['ignoretitles'],s['playlist'])
+        print('Station id:',id)
     
     # Do it again (to make sure we aren't duplicating stations
-    #for s in stations:
-    #    db.create_station(s['name'],s['site'],s['ignoreartists'],s['ignoretitles'],s['playlist'])
+    for s in stations:
+        print('Inserting... ',end='')
+        id = db.create_station(s['name'],s['site'],s['ignoreartists'],s['ignoretitles'],s['playlist'])
+        print('Station id:',id)
     # TODO Make a test for this
     
+    assert local_station_count == len(db.get_station_data())
     
+    print('Verifying station data... ',end='')
     # Make sure our data matches the DB
     db_station_count = 0
     for s in stations:
@@ -436,20 +482,46 @@ if __name__ == '__main__':
         db_station_count+=1
             
     # And make sure we got every station
-    assert db_station_count == local_station_count
-    
+    assert db_station_count == local_station_count    
     # And make sure there aren't duplicates in the DB
     assert local_station_count == len(db.get_station_data())
+    print('Done.')
     
-    # TODO Test insertion of songs into playlists
+    # Make some tracks that will be overwritten by the next loop where we add tracks
+    # to a playlist
+    sname = stations[0]['name']
+    tracks = []
+    print('Making tracks... ')#,end='')
+    for ii in range(100):
+        tracks.append({
+                   'album':'Album'+sname+str(ii),
+                   'artist':'Artist'+sname+str(ii),
+                   'name':'Name'+sname+str(ii),
+                   'date':datetime.datetime.fromtimestamp(ii*1000),
+                   'youtube':'Youtube'+sname+str(ii),
+                   })
+        for t in tracks:        
+            
+            # Make (or don't) the artist
+            artist_id = db._make_artist(t['artist'],commit=False)
+            
+            # Make (or don't) the album
+            album_id = db._make_album(artist_id,t['album'],commit=False)
+            
+            # Make (or don't) a track            
+            track_id = db._make_track(t['name'],album_id,artist_id,t['youtube'],commit=False)
+            
+        #id = db.add_track_to_station_playlist(sname,t['album'],t['artist'],t['name'],t['date'],t['youtube'],commit=False)
+        #track_id.append(id)
+    print('Done.')
     
-    track_id = []
+    # Test insertion of songs into playlists   
     for s in stations:
         sname = s['name']
-        
+        print('Adding tracks to station',sname)
         # Make some tracks for this station
         tracks = []
-        for ii in range(100):
+        for ii in range(10):
             tracks.append({
                        'album':'Album'+sname+str(ii),
                        'artist':'Artist'+sname+str(ii),
@@ -458,10 +530,13 @@ if __name__ == '__main__':
                        'youtube':'Youtube'+sname+str(ii),
                        })
         for t in tracks:          
-            track_id.append(db.add_track_to_station_playlist(sname,t['album'],t['artist'],t['name'],t['date'],t['youtube'],commit=False))
+            id = db.add_track_to_station_playlist(sname,t['album'],t['artist'],t['name'],t['date'],t['youtube'],commit=False)
+            #track_id.append(id)
+    db._conn.commit()
+
     
     # And make sure that all of the id's line up
-    '''
+    
     for s in stations:
         sname = s['name']
         
@@ -475,9 +550,8 @@ if __name__ == '__main__':
                        'date':datetime.datetime.fromtimestamp(ii*1000),
                        'youtube':'Youtube'+sname+str(ii),
                        })
-    '''
     
-    db._conn.commit()
+    
     print('All tests passed')
             
             
