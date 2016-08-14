@@ -412,9 +412,11 @@ class PlaylistDatabase():
         '''
         
         with self._lock:
-            url = self._cur.execute('''SELECT Track.youtube_link from Track JOIN Artist JOIN Album ON
-            Track.artist_id = Artist.id and Track.album_id = Album.id WHERE Track.track_name = %s and Album.name = %s and Artist.name = %s LIMIT 1''',
-            (title,album,artist)).fetchone()
+            self._cur.execute('''SELECT Track.youtube_link from Track JOIN Artist JOIN Album ON
+            Track.artist_id = Artist.id and Track.album_id = Album.id WHERE Track.track_name = %s and Album.album_name = %s and Artist.artist_name = %s LIMIT 1''',
+            (title,album,artist))
+            
+            url = self._cur.fetchone()
             
             # LookupError seems better
             if url == None:
