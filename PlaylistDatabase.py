@@ -424,7 +424,7 @@ class PlaylistDatabase():
             else:
                 return url[0]
 
-    def __init__(self,user='root',password='',host='127.0.0.1',initialize=False):
+    def __init__(self,user='root',password='riggskevinroo+',host='printserver',initialize=False):
         
         self._conn = mysql.connect(user=user,password=password,host=host)
         
