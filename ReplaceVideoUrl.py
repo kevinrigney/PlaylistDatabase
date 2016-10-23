@@ -5,7 +5,7 @@
 
 from PlaylistDatabase import PlaylistDatabase
 
-db = PlaylistDatabase()
+db = PlaylistDatabase(config_file='PlaylistDatabaseConfig.ini')
 
 video = input('Enter the video ID: ')
 if video.startswith('https://youtu.be/'):

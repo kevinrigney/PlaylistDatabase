@@ -5,6 +5,7 @@ import datetime
 
 from math import floor
 from threading import RLock
+from configparser import ConfigParser
 
 class PlaylistDatabase():
     '''
@@ -424,7 +425,16 @@ class PlaylistDatabase():
             else:
                 return url[0]
 
-    def __init__(self,user='root',password='riggskevinroo+',host='printserver',initialize=False):
+    def __init__(self,user='root',password='password',host='127.0.0.1',initialize=False,config_file=None):
+        
+        # Config contains the config file, an INI format
+        config = ConfigParser()
+        if config_file is not None:
+            config.read(config_file)            
+            # Use the values here instead of the available kwargs
+            user = config['database']['user']
+            password = config['database']['password']
+            host = config['database']['host']
         
         self._conn = mysql.connect(user=user,password=password,host=host)
         
