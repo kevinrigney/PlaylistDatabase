@@ -345,7 +345,12 @@ class PlaylistDatabase():
                 exec("channel_dict['ignoretitles'] = "+ ignore_titles)
                 channel_dict['name'] = name
                 channel_dict['playlist'] = youtube_playlist_id
-                channel_dict['active'] = active
+
+                if (active == '1')
+                    channel_dict['active'] = True
+                else
+                    channel_dict['active'] = False
+ 
                 try:
                     track_data = self.get_latest_station_tracks(name)
                     channel_dict['lastartist'] = track_data['artist']
