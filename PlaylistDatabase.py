@@ -346,7 +346,7 @@ class PlaylistDatabase():
                 channel_dict['name'] = name
                 channel_dict['playlist'] = youtube_playlist_id
 
-                if (active == '1'):
+                if (active == 1):
                     channel_dict['active'] = True
                 else:
                     channel_dict['active'] = False
