@@ -24,52 +24,6 @@ class PlaylistDatabase():
         * Creating new empty tables.
         '''
         
-        """
-        self._cur.execute('''
-        IF EXISTS(
-            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Album'
-        )
-        THEN
-            ALTER TABLE Album DROP FOREIGN KEY artist_id
-        END IF;''')
-        
-        self._cur.execute('''
-        IF EXISTS(
-            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Track'
-        )
-        THEN
-            ALTER TABLE Track DROP FOREIGN KEY album_id
-        END IF;''')
-        
-        self._cur.execute('''
-        IF EXISTS(
-            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Track'
-        )
-        THEN
-            ALTER TABLE Track DROP FOREIGN KEY artist_id
-        END IF;''')
-        
-        self._cur.execute('''
-        IF EXISTS(
-            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Playlist'
-        )
-        THEN
-               ALTER TABLE Playlist DROP FOREIGN KEY track_id
-        END IF;''')
-        
-        self._cur.execute('''
-        IF EXISTS(
-            SELECT table_name FROM INFORMATION_SCHEMA.TABLES WHERE table_schema = 'PlaylistDB' AND table_name LIKE 'Playlist'
-        )
-        THEN
-               ALTER TABLE Playlist DROP FOREIGN KEY station_id
-        END IF;''')
-        
-        self._cur.execute('DROP TABLE IF EXISTS Artist')
-        self._cur.execute('DROP TABLE IF EXISTS Album')
-        self._cur.execute('DROP TABLE IF EXISTS Track')
-        self._cur.execute('DROP TABLE IF EXISTS Station')
-        """
         print('Dropping...')
         try:
             self._cur.execute('drop database PlaylistDB')
