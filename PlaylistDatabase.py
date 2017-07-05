@@ -75,6 +75,7 @@ class PlaylistDatabase():
             ignore_artists TEXT,
             ignore_titles TEXT,
             youtube_playlist_id TEXT,
+            active BOOL NOT NULL,
         
             PRIMARY KEY (id),
             KEY (station_name)
@@ -232,8 +233,8 @@ class PlaylistDatabase():
             ignore_titles = str(ignore_titles)
             #print(playlist_name)
             self._cur.execute('''
-            INSERT IGNORE INTO Station(station_name,web_address,ignore_artists,ignore_titles,youtube_playlist_id)
-            VALUES ( %s, %s, %s, %s, %s )''', (station_name,web_address,ignore_artists,ignore_titles,youtube_playlist_id)
+            INSERT IGNORE INTO Station(station_name,web_address,ignore_artists,ignore_titles,youtube_playlist_id,active)
+            VALUES ( %s, %s, %s, %s, %s, %s )''', (station_name,web_address,ignore_artists,ignore_titles,youtube_playlist_id,'true')
             )
             
             if commit:
@@ -331,7 +332,7 @@ class PlaylistDatabase():
         with self._lock:
             out_list = []
             for s in self._get_all_stations():
-                id,name,web_address,ignore_artists,ignore_titles,youtube_playlist_id = s
+                id,name,web_address,ignore_artists,ignore_titles,youtube_playlist_id,active = s
                 
                 if station is not None:
                     if name != station:
@@ -344,6 +345,7 @@ class PlaylistDatabase():
                 exec("channel_dict['ignoretitles'] = "+ ignore_titles)
                 channel_dict['name'] = name
                 channel_dict['playlist'] = youtube_playlist_id
+                channel_dict['active'] = active
                 try:
                     track_data = self.get_latest_station_tracks(name)
                     channel_dict['lastartist'] = track_data['artist']
