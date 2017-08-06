@@ -90,3 +90,7 @@ ENV/
 
 # The real config file
 PlaylistDatabaseConfig.ini
+
+.project
+.pydevproject
+*~
