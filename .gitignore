@@ -91,6 +91,9 @@ ENV/
 # The real config file
 PlaylistDatabaseConfig.ini
 
+# The secret sauce
+lookup.py
+
 .project
 .pydevproject
 *~
