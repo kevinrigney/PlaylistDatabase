@@ -1,0 +1,23 @@
+
+{% for t in tracks %}
+<b>Artist:</b> {{ t.artist }}<br>
+<b>Album:</b> {{ t.album }}<br>
+<b>Title:</b> <a href="https://youtu.be/{{t.youtube_id}}"> {{ t.title }} </a><br>
+<b>UID:</b> <a href="{{t.uid_url}}"> {{ t.uid }} </a><br>
+
+{% if show_replace == True %}
+<form action="{{ url_for('replace_ytid',uid=t.uid) }}" method="post" role="form">
+New URL: <input type="text", name="new_id"> 
+<input type="submit" value="Replace"> <br>
+{% endif %}
+
+{% if show_video == True %}
+<iframe width="231" height="120" src="https://www.youtube.com/embed/{{t.youtube_id}}"frameborder="0" allowfullscreen></iframe>
+{% endif %}
+
+<br>
+
+{% else %}
+No track found!
+{% endfor %}
+
