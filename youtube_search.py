@@ -94,6 +94,18 @@ class YoutubeSearcher():
     #print("Videos:\n", "\n".join(videos), "\n")
     return videos
 
+  def is_video_valid(self,video_id):
+    # Check if a video is still valid.
+    # (make sure it hasn't been deleted)
+
+    # The part is "id" because it has a quota cost of 0
+    search_response = self.youtube.videos().list(
+      id=video_id,
+      part="id"
+    ).execute()
+
+    return search_response['pageInfo']['totalResults'] > 0
+
 if __name__ == "__main__":
   argparser.add_argument("--q", help="Search term", default="Google")
   argparser.add_argument("--max-results", help="Max results", default=25)
