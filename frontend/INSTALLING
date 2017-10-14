@@ -1,0 +1,14 @@
+# You'll probably want a virtualenv to install flask
+
+sudo apt-get install python3-virtualenv 
+
+virtualenv --system-site-packages venv
+
+source ./venv/bin/activate
+
+pip3 install flask
+
+# Then you can use the run.sh script to start the frontend.
+# Make sure you change the paths to match your setup.
+# Also change the path to your databse config file at the top
+# of main.py
