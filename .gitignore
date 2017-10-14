@@ -94,6 +94,10 @@ PlaylistDatabaseConfig.ini
 # The secret sauce
 lookup.py
 
+#youtube credentials
+ytpl-oauth2.json
+client_secrets.json
+
 .project
 .pydevproject
 *~
