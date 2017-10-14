@@ -386,18 +386,38 @@ class PlaylistDatabase():
             else:
                 return url[0]
 
-    def __init__(self,user='root',password='password',host='127.0.0.1',initialize=False,config_file=None):
+    def lookup_station_by_playlist_id(self,playlist_id):
+        with self._lock:
+            self._cur.execute('''SELECT * from Station where Station.youtube_playlist_id = %s''',(playlist_id,))
+            station = self._cur.fetchone()
+
+            if station == None:
+                raise LookupError
+            else:
+                id, name, addr, i_a, i_t, pl_id, active = station
+                station_dict = {}
+                station_dict['id'] = id
+                station_dict['name'] = name
+                station_dict['ignore_artists'] = i_a
+                station_dict['ignore_titles'] = i_t
+                station_dict['playlist_id'] = pl_id
+                station_dict['active'] = active
+
+                return station_dict
+
+    def __init__(self,user='root',password='password',host='127.0.0.1',initialize=False,config_file=None,connect=True):
         
         # Config contains the config file, an INI format
         config = ConfigParser()
         if config_file is not None:
             config.read(config_file)            
             # Use the values here instead of the available kwargs
-            user = config['database']['user']
-            password = config['database']['password']
-            host = config['database']['host']
+            self._user = config['database']['user']
+            self._password = config['database']['password']
+            self._host = config['database']['host']
         
-        self._conn = mysql.connect(user=user,password=password,host=host)
+
+        self._conn = mysql.connect(user=self._user,password=self._password,host=self._host)
         
         self._cur = self._conn.cursor()
         
@@ -407,14 +427,37 @@ class PlaylistDatabase():
         except mysql.errors.ProgrammingError:
             print('The database does not exist. Initializing')
             initialize = True
-        
+    
         # Lock on our public-facing functions
         self._lock = RLock()
         
         if initialize:
             self._init_database_schema()
+        
+        if not connect:
+            # Then close the connection because they will use "with" statements
+            self._cur = None
+            self._conn.close()
+            self._conn = None
 
         #main()
+
+
+    def __enter__(self):
+        self._conn = mysql.connect(user=self._user,password=self._password,host=self._host)
+        self._cur = self._conn.cursor()
+        self._cur.execute('USE PlaylistDB;')
+        
+        return self._cur
+
+    def __exit__(self,exc_type,exc_value,exc_traceback):
+
+        self._cur = None
+        self._conn.commit()
+        self._conn.close()
+        self._conn = None
+
+
 if __name__ == '__main__':
 
     print('Unit Testing...')
