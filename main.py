@@ -67,6 +67,13 @@ def grabinfo(channel_dict):
             url = db.look_up_song_youtube(artist,album,song)
             # Getting this ID assumes we always have a youtube short URL
             ytid = url.split('youtu.be/')[1] # HTTPS Indifferent
+
+            # Make sure the video hasn't been taken down.
+            if not searcher.is_video_valid(ytid):
+                # Trigger it to look up the track again.
+                print('Video ' + ytid + ' has ben taken down. Re-searching.')
+                raise LookupError
+
         except LookupError:
             # Ok, look it up             
             print('Song not found in DB. Looking up in youtube.')   
