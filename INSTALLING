@@ -15,7 +15,7 @@ sudo pip3 install --upgrade google-api-python-client
 
 create database PlaylistDB;
 GRANT ALL PRIVILEGES on PlaylistDB.* TO 'root'@'127.0.0.1';
-grant select, insert, update on PlaylistDB.* to 'playlist_user'@'127.0.0.1' identified by 'super_secret_password'
+grant select, insert, update on PlaylistDB.* to 'playlist_user'@'127.0.0.1' identified by 'super_secret_password';
 
 # Then you should be able to run main.py in python3 or edit 
 # run.sh to correctly run the program
