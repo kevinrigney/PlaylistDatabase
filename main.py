@@ -19,9 +19,8 @@ from PlaylistDatabase import PlaylistDatabase
 # and figures out if there's a new song
 from lookup import lookup_info_from_channel_dict
 
-
-db = PlaylistDatabase(config_file='PlaylistDatabaseConfig.ini') # The database
-end_event = Event() # Set when we get an interrupt. Causes the main loop to end
+end_event = Event() 
+pldb = PlaylistDatabase(config_file='PlaylistDatabaseConfig.ini',connect=False) # The database
 searcher = youtube_search.YoutubeSearcher() # When searching for songs in youtube
 ytpl = youtube_playlist.YoutubePlaylist() # For manipulating youtube playlists
 
@@ -29,7 +28,7 @@ def siginthandler(signum,frame):
     print('Got signal')
     end_event.set()    
 
-def grabinfo(channel_dict):
+def grabinfo(channel_dict,db):
     '''
     Given a channel dictionary containing information about a channel
     Scrape the artist and title
@@ -56,7 +55,7 @@ def grabinfo(channel_dict):
     artist,song,album = lookup_info_from_channel_dict(channel_dict)
     
     print('Last song: "' + str(lastsong) + '" Last artist: "' + str(lastartist) + '"')
-    print('This song: "' + str(song) + '" This artist: "' + str(artist) + '"')
+    print('This song: "' + str(song) + '" This artist: "' + str(artist) + '" This album: "' + str(album)+'"')
     
     if artist != None:
             
@@ -99,20 +98,22 @@ def grabinfo(channel_dict):
 
 def main():
 
-    # Run this script every 60(ish) seconds and try to get the next song
+    # Run this script every 120(ish) seconds and try to get the next song
     while (not end_event.isSet()):
-        sleeptime = random.randint(60,120)
-        for channel_dict in db.get_station_data():
-            print() 
-            try:
-                if(channel_dict['active']):
-                    grabinfo(channel_dict)
-                    sleeptime-=10
-                else:
-                    print('Skipping channel: ' + channel_dict['name'])
-            except:
-                print_exc()
-                print('Got exception')
+        sleeptime = random.randint(100,140)
+        try:
+            # Re-open and close the conntection every time 
+            with pldb:
+                for channel_dict in pldb.get_station_data():
+                    print() 
+                    if(channel_dict['active']):
+                        grabinfo(channel_dict,pldb)
+                        #sleeptime-=10
+                    else:
+                        print('Skipping channel: ' + channel_dict['name'])
+        except:
+            print_exc()
+            print('Got exception')
 
         if sleeptime <=0:
             sleeptime=10
